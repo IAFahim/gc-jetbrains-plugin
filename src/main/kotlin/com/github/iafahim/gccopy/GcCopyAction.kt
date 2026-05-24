@@ -6,6 +6,7 @@ import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.CommonDataKeys
+import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.progress.ProgressIndicator
 import com.intellij.openapi.progress.Task
 import com.intellij.openapi.project.Project
@@ -15,84 +16,102 @@ import java.util.concurrent.TimeUnit
 
 class GcCopyAction : AnAction() {
 
+    private val notificationGroupId = "gc.notifications"
+    private val pathPrefix = System.getProperty("user.home").let { home ->
+        "$home/.local/bin:$home/bin:/usr/local/bin"
+    }
+
     override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.BGT
 
     override fun update(event: AnActionEvent) {
+        // Bulletproof: Always show the action, but only enable if we can find a context
         event.presentation.isVisible = true
-        event.presentation.isEnabled = targetDirectory(event) != null
+        
+        val directory = resolveTargetDirectory(event)
+        event.presentation.isEnabled = true // Always allow it to be clicked
+        
+        if (directory != null) {
+            event.presentation.text = "Copy with gc (${directory.name})"
+        } else {
+            event.presentation.text = "Copy with gc"
+        }
     }
 
     override fun actionPerformed(event: AnActionEvent) {
         val project = event.project
-        val directory = targetDirectory(event) ?: return
-        val command = resolveCommand()
-        object : Task.Backgroundable(project, "Running gc in ${directory.name}", true) {
-            private var outcome: Outcome = Outcome.Failure(directory, "did not run")
+        val directory = resolveTargetDirectory(event) ?: return
+        val invocation = GcSettings.getInstance().command
 
+        object : Task.Backgroundable(project, "Running gc context copy", true) {
             override fun run(indicator: ProgressIndicator) {
                 indicator.isIndeterminate = true
-                outcome = execute(command, directory)
-            }
-
-            override fun onSuccess() {
-                announce(project, outcome)
+                indicator.text = "Executing gc in ${directory.absolutePath}..."
+                
+                val result = executeGc(directory, invocation)
+                
+                ApplicationManager.getApplication().invokeLater {
+                    showNotification(project, result)
+                }
             }
         }.queue()
     }
 
-    private fun resolveCommand(): String =
-        runCatching { GcSettings.getInstance().command }.getOrDefault(GcSettings.DEFAULT_COMMAND)
+    private fun resolveTargetDirectory(event: AnActionEvent): File? {
+        // 1. Try selected files/folders
+        val virtualFiles = event.getData(CommonDataKeys.VIRTUAL_FILE_ARRAY)
+        if (!virtualFiles.isNullOrEmpty()) {
+            val first = virtualFiles[0]
+            val folder = if (first.isDirectory) first else first.parent
+            if (folder != null) return File(folder.path)
+        }
 
-    private fun targetDirectory(event: AnActionEvent): File? {
-        val selected: VirtualFile? =
-            event.getData(CommonDataKeys.VIRTUAL_FILE_ARRAY)?.firstOrNull()
-                ?: event.getData(CommonDataKeys.VIRTUAL_FILE)
-        val anchor = selected ?: return projectBaseDirectory(event)
-        val folder = if (anchor.isDirectory) anchor else anchor.parent ?: return null
-        return File(folder.path)
+        // 2. Try the file open in the editor
+        val editorFile = event.getData(CommonDataKeys.VIRTUAL_FILE)
+        if (editorFile != null) {
+            val folder = if (editorFile.isDirectory) editorFile else editorFile.parent
+            if (folder != null) return File(folder.path)
+        }
+
+        // 3. Absolute fallback: Project root
+        val project = event.project
+        if (project != null && project.basePath != null) {
+            return File(project.basePath!!)
+        }
+
+        return null
     }
 
-    private fun projectBaseDirectory(event: AnActionEvent): File? =
-        event.project?.basePath?.let(::File)
-
-    private fun execute(command: String, directory: File): Outcome {
-        val home = System.getProperty("user.home")
-        val pathPrefix = "$home/.local/bin:$home/bin:/usr/local/bin"
-        val script = "export PATH=\"$pathPrefix:\$PATH\"; $command"
-        val process = ProcessBuilder("bash", "-lc", script)
-            .directory(directory)
-            .redirectErrorStream(true)
-            .start()
-        val transcript = process.inputStream.bufferedReader().readText().trim()
-        val finished = process.waitFor(120, TimeUnit.SECONDS)
-        return when {
-            !finished -> {
+    private fun executeGc(directory: File, invocation: String): GcResult {
+        return try {
+            val command = "export PATH=\"$pathPrefix:\$PATH\"; $invocation"
+            val process = ProcessBuilder("bash", "-lc", command)
+                .directory(directory)
+                .redirectErrorStream(true)
+                .start()
+            
+            val output = process.inputStream.bufferedReader().readText().trim()
+            val finished = process.waitFor(60, TimeUnit.SECONDS)
+            
+            if (!finished) {
                 process.destroyForcibly()
-                Outcome.Failure(directory, "command timed out after 120s")
+                GcResult(false, directory, "Process timed out")
+            } else if (process.exitValue() == 0) {
+                GcResult(true, directory, "Successfully copied to clipboard")
+            } else {
+                GcResult(false, directory, output.ifBlank { "Exit code ${process.exitValue()}" })
             }
-            process.exitValue() == 0 -> Outcome.Success(directory)
-            else -> Outcome.Failure(directory, transcript.ifBlank { "exit code ${process.exitValue()}" })
+        } catch (e: Exception) {
+            GcResult(false, directory, e.message ?: "Unknown execution error")
         }
     }
 
-    private fun announce(project: Project?, outcome: Outcome) {
-        val group = NotificationGroupManager.getInstance().getNotificationGroup("gc.notifications")
-        val notification = when (outcome) {
-            is Outcome.Success -> group.createNotification(
-                "Copied ${outcome.directory.name} to clipboard",
-                NotificationType.INFORMATION,
-            )
-            is Outcome.Failure -> group.createNotification(
-                "gc failed in ${outcome.directory.name}",
-                outcome.detail,
-                NotificationType.ERROR,
-            )
-        }
-        notification.notify(project)
+    private fun showNotification(project: Project?, result: GcResult) {
+        val group = NotificationGroupManager.getInstance().getNotificationGroup(notificationGroupId)
+        val type = if (result.success) NotificationType.INFORMATION else NotificationType.ERROR
+        val title = if (result.success) "gc Copy Success" else "gc Copy Failed"
+        
+        group.createNotification(title, result.message, type).notify(project)
     }
 
-    private sealed interface Outcome {
-        data class Success(val directory: File) : Outcome
-        data class Failure(val directory: File, val detail: String) : Outcome
-    }
+    private data class GcResult(val success: Boolean, val directory: File, val message: String)
 }

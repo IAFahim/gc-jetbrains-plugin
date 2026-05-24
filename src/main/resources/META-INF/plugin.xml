@@ -4,33 +4,39 @@
     <vendor url="https://github.com/IAFahim/gc">IAFahim</vendor>
 
     <description><![CDATA[
-        Adds <b>Copy with gc</b> to the Project view and editor context menus.
-        Runs a configurable command (default <code>gc -e cs -z \\ \n\n</code>) in the
-        selected folder via a login shell, so <code>~/.local/bin</code> is on PATH, and
-        reports the result. Change the command in <b>Settings &gt; Tools &gt; gc Copy</b>.
+        Ultimate AI context copy tool. Runs <code>gc</code> in any folder to generate LLM-ready markdown.
+        Configure the command in <b>Settings | Tools | gc Copy</b>.
     ]]></description>
 
     <depends>com.intellij.modules.platform</depends>
 
     <extensions defaultExtensionNs="com.intellij">
         <notificationGroup id="gc.notifications" displayType="BALLOON"/>
-        <applicationConfigurable
-            parentId="tools"
-            id="com.github.iafahim.gccopy.settings"
-            displayName="gc Copy"
-            instance="com.github.iafahim.gccopy.GcSettingsConfigurable"/>
+        <applicationService serviceImplementation="com.github.iafahim.gccopy.GcSettings"/>
+        <applicationConfigurable 
+            parentId="tools" 
+            instance="com.github.iafahim.gccopy.GcSettingsConfigurable" 
+            id="com.github.iafahim.gccopy.GcSettingsConfigurable" 
+            displayName="gc Copy"/>
     </extensions>
 
     <actions>
-        <action id="gc.copy"
+        <action id="gc.copy.action"
                 class="com.github.iafahim.gccopy.GcCopyAction"
                 text="Copy with gc"
-                description="Run the configured gc command in this folder and copy to the clipboard">
+                description="Run gc in this folder and copy to the clipboard">
+            
+            <!-- In Rider, everything eventually flows through these groups -->
             <add-to-group group-id="ProjectViewPopupMenu" anchor="last"/>
             <add-to-group group-id="EditorPopupMenu" anchor="last"/>
-            <add-to-group group-id="SolutionExplorerPopupMenu" anchor="last"/>
-            <add-to-group group-id="SolutionExplorerPopupMenu.ProjectManagement" anchor="last"/>
-            <add-to-group group-id="UnityExplorer.ProjectView.PopupMenu" anchor="last"/>
+            
+            <!-- Bulletproof fallback: Standard Copy/Paste group -->
+            <add-to-group group-id="CutCopyPasteGroup" anchor="last"/>
+            
+            <!-- Main menu fallback -->
+            <add-to-group group-id="ToolsMenu" anchor="last"/>
+            
+            <keyboard-shortcut keymap="$default" first-keystroke="shift alt C"/>
         </action>
     </actions>
 </idea-plugin>
