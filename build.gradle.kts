@@ -8,7 +8,7 @@ version = "2.0.0"
 
 dependencies {
     intellijPlatform {
-        intellijIdea("2025.2.6.2")
+        intellijIdea("2026.1.2")
     }
 }
 
@@ -22,5 +22,5 @@ intellijPlatform {
 }
 
 kotlin {
-    jvmToolchain(21)
+    jvmToolchain(17)
 }
