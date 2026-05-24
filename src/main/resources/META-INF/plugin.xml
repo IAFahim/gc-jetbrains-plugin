@@ -22,12 +22,15 @@
     </extensions>
 
     <actions>
-        <action id="com.github.iafahim.gccopy.GcCopyAction"
+        <action id="gc.copy"
                 class="com.github.iafahim.gccopy.GcCopyAction"
                 text="Copy with gc"
                 description="Run the configured gc command in this folder and copy to the clipboard">
             <add-to-group group-id="ProjectViewPopupMenu" anchor="last"/>
             <add-to-group group-id="EditorPopupMenu" anchor="last"/>
+            <add-to-group group-id="SolutionExplorerPopupMenu" anchor="last"/>
+            <add-to-group group-id="SolutionExplorerPopupMenu.ProjectManagement" anchor="last"/>
+            <add-to-group group-id="UnityExplorer.ProjectView.PopupMenu" anchor="last"/>
         </action>
     </actions>
 </idea-plugin>
