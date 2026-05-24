@@ -4,7 +4,7 @@ plugins {
 }
 
 group = "com.github.iafahim"
-version = "1.0.0"
+version = "2.0.0"
 
 dependencies {
     intellijPlatform {
@@ -15,7 +15,7 @@ dependencies {
 intellijPlatform {
     pluginConfiguration {
         ideaVersion {
-            sinceBuild = "252"
+            sinceBuild = "233"
             untilBuild = provider { null }
         }
     }

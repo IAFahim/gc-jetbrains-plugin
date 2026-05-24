@@ -1,27 +1,30 @@
 # gc Copy — JetBrains plugin
 
-Adds **Copy with gc (.cs)** to the Project-view right-click menu. It runs
-`gc -e cs -z \\ \n\n` in the selected folder (login shell, so your `~/.local/bin`
-is on `PATH`) and `gc` copies the result to the clipboard. A balloon reports
-success or the captured error.
+Adds **Copy with gc** to the Project-view and editor right-click menus. It runs a
+configurable command (default `gc -e cs -z \\ \n\n`) in the selected folder using
+`bash -lc`, so your login `PATH` plus `~/.local/bin` is available, and `gc` copies
+the result to the clipboard. A balloon reports success or shows the captured error.
+
+Change the command without recompiling in **Settings → Tools → gc Copy**. Whatever
+you type there is handed to bash exactly as if you typed it in a terminal.
 
 ## Prerequisites
 
-- **JDK 17 or newer** on `PATH` (this project targets a JDK 21 toolchain).
-- **Internet on first build.** The Gradle wrapper downloads Gradle 9.5, and the
-  IntelliJ Platform Gradle Plugin downloads the target IDE (~1 GB, cached after).
-- The **`gc` CLI** installed and working from your terminal.
+- **JDK 17 or newer** on `PATH` (the build uses a JDK 21 toolchain).
+- **Internet on first build.** The wrapper fetches Gradle 9.5; the IntelliJ Platform
+  plugin fetches the target IDE (~1 GB, cached afterward).
+- The **`gc` CLI** working from your terminal.
 
-You do **not** need an IDE pre-installed to test — `runIde` downloads a sandbox one.
+You do not need an IDE pre-installed to test, and you do not need to install Gradle.
 
-## Test it (sandbox IDE)
+## Test it live
 
 ```bash
 ./gradlew runIde
 ```
 
-A throwaway IDE launches with the plugin loaded. Open any project, right-click a
-folder in the Project tool window, choose **Copy with gc (.cs)**.
+A sandbox IDE launches with the plugin loaded. Right-click a folder in the Project
+tool window → **Copy with gc**.
 
 ## Build the installable zip
 
@@ -29,18 +32,27 @@ folder in the Project tool window, choose **Copy with gc (.cs)**.
 ./gradlew buildPlugin
 ```
 
-Output: `build/distributions/gc-copy-1.0.0.zip`. Install it in your real IDE via
-**Settings → Plugins → ⚙ → Install Plugin from Disk…**, then restart.
+Output: `build/distributions/gc-copy-2.0.0.zip`. Install via
+**Settings → Plugins → ⚙ → Install Plugin from Disk…**, then **restart the IDE**.
 
-## Changing the command
+## If the menu item does not appear
 
-Edit the single line `gcInvocation` in
-`src/main/kotlin/com/github/iafahim/gccopy/GcCopyAction.kt`. The string is passed
-to `bash -lc` verbatim, so it is tokenized exactly as in your terminal.
+1. **Settings → Plugins** — confirm *gc Copy* is present and enabled (not greyed,
+   no error marker). If it shows an error, open it for the load failure reason.
+2. Confirm you actually rebuilt and reinstalled the new zip, then restarted.
+3. This plugin loads on IDE build 233 (2023.3) and newer. On anything older, lower
+   `sinceBuild` in `build.gradle.kts`.
+4. If you rename the package or any class, update the matching name in
+   `src/main/resources/META-INF/plugin.xml` too — a stale class name there makes the
+   whole plugin fail to load, and the action silently disappears.
+
+## Assign a keyboard shortcut (optional)
+
+**Settings → Keymap**, search *Copy with gc*, right-click → Add Keyboard Shortcut.
 
 ## Notes
 
-- Targets the IntelliJ Platform (IDEA, PyCharm, Rider, WebStorm, etc.).
-- Uses `bash`, so it expects Linux or macOS. Windows would need a shell tweak.
-- If a version fails to resolve, bump `intellijIdea(...)` in `build.gradle.kts`
+- Uses `bash`, so it targets Linux/macOS. Windows needs the `ProcessBuilder` line
+  in `GcCopyAction.kt` swapped for a Windows shell.
+- If a pinned version fails to resolve, bump `intellijIdea(...)` in `build.gradle.kts`
   and the plugin versions in `settings.gradle.kts` to current releases.
